@@ -13,10 +13,14 @@ import (
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})))
+
 	ps := pow.New(3)
 	ws := wow.New()
 
-	s := tcpserver.New("localhost:8080", ps, ws)
+	s := tcpserver.New("localhost:8080", ps, ws) // TODO: move addr to config
 
 	ctx, cancel := context.WithCancel(context.Background())
 

@@ -7,8 +7,14 @@ import (
 	"log/slog"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+)
+
+const (
+	timeout      = time.Second
+	maxBodyBytes = int64(1 << 16) // 65536 bytes
 )
 
 // PowService is an interface for a service that provides and verifies a Proof of Work challenge
@@ -93,40 +99,53 @@ func (s *Server) handleClient(conn net.Conn) {
 		}
 	}()
 
-	// Read and process data from the client
-	const MaxBodyBytes = int64(1 << 16) // 65536 bytes
-	r := io.LimitReader(conn, MaxBodyBytes)
+	err := conn.SetReadDeadline(time.Now().Add(timeout))
+	if err != nil {
+		slog.Error("cannot set read deadline", err)
+		return
+	}
 
-	payload, err := io.ReadAll(r)
+	r := io.LimitReader(conn, maxBodyBytes)
+
+	payload := make([]byte, maxBodyBytes)
+
+	n, err := r.Read(payload)
 	if err != nil {
 		slog.Error("cannot read request body", err)
 		return
 	}
 
-	// if there isn't a challenge, generate one
-	if len(payload) == 0 {
-		s.generateAndWriteChallenge(conn)
+	payload = payload[:n]
+
+	// if GET, then it's a challenge request
+	if string(payload) == "GET" {
+		err = s.generateAndWriteChallenge(conn)
+		if err != nil {
+			slog.Error("cannot generate and write challenge", err)
+		}
 		return
 	}
 
-	val, ok := s.challenges.Load(conn.RemoteAddr().String())
+	// if not GET, then it's a challenge response
+	parts := strings.Split(string(payload), " ")
+	if len(parts) != 2 {
+		slog.Error("invalid payload")
+		return
+	}
+
+	challenge, nonce := parts[0], parts[1]
+
+	slog.Debug("challenge", slog.Any("challenge", challenge), slog.Any("nonce", nonce))
+
+	_, ok := s.challenges.Load(challenge)
 	if !ok {
 		slog.Error("challenge not found")
-		s.generateAndWriteChallenge(conn)
-		return
-	}
-
-	challenge, ok := val.(string)
-	if !ok {
-		slog.Error("challenge from map has wrong type")
-		s.generateAndWriteChallenge(conn)
 		return
 	}
 
 	// if challenge wrong, generate new one
-	if !s.pow.VerifyChallenge(challenge, string(payload)) {
+	if !s.pow.VerifyChallenge(challenge, nonce) {
 		slog.Error("challenge verification failed")
-		s.generateAndWriteChallenge(conn)
 		return
 	}
 
@@ -137,18 +156,22 @@ func (s *Server) handleClient(conn net.Conn) {
 	}
 }
 
-func (s *Server) generateAndWriteChallenge(conn net.Conn) {
+func (s *Server) generateAndWriteChallenge(conn net.Conn) error {
 	challenge := s.pow.GenerateChallenge()
 
-	s.challenges.Store(conn.RemoteAddr().String(), challenge)
+	s.challenges.Store(challenge, struct{}{})
 	go func() {
 		<-time.After(time.Minute)
-		s.challenges.Delete(conn.RemoteAddr().String())
+		s.challenges.Delete(challenge)
 	}()
 
 	difficulty := s.pow.Difficulty()
 
-	if _, err := conn.Write([]byte(challenge + "\n" + strconv.Itoa(difficulty))); err != nil {
+	slog.Debug("challenge", slog.Any("challenge", challenge), slog.Any("difficulty", difficulty))
+
+	if _, err := conn.Write([]byte(challenge + " " + strconv.Itoa(difficulty))); err != nil {
 		slog.Error("cannot write challenge", err)
+		return err
 	}
+	return nil
 }
