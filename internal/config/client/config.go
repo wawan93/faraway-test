@@ -1,4 +1,4 @@
-package config
+package client
 
 import (
 	"fmt"
@@ -8,8 +8,8 @@ import (
 
 // Config represents the configuration of the application
 type Config struct {
-	ListenPort int `env:"LISTEN_PORT" default:"8080"`
-	LogLevel   int `env:"LOG_LEVEL" default:"0"`
+	LogLevel   int    `env:"LOG_LEVEL" default:"0"`
+	ServerAddr string `env:"SERVER_ADDR" default:"localhost:8080"`
 }
 
 // FromEnv loads the configuration from the environment

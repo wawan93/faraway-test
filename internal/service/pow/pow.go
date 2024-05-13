@@ -17,7 +17,7 @@ type Service struct {
 // New creates a new Service
 func New(difficulty int) *Service {
 	return &Service{
-		difficulty: difficulty,
+		difficulty: difficulty, // TODO: make difficulty dynamic, based on requests per second
 	}
 }
 

@@ -25,7 +25,7 @@ func (c *TCPClient) GetQuote(challenge string, nonce string) (string, error) {
 	}
 	defer conn.Close()
 
-	_, err = conn.Write([]byte(challenge + " " + nonce))
+	_, err = conn.Write([]byte(challenge + " " + nonce + "\n"))
 	if err != nil {
 		slog.Error("Error:", err)
 		return "", err
@@ -48,7 +48,7 @@ func (c *TCPClient) GetChallenge() (string, int, error) {
 	}
 	defer conn.Close()
 
-	_, err = conn.Write([]byte("GET"))
+	_, err = conn.Write([]byte("GET\n"))
 	if err != nil {
 		slog.Error("Error:", err)
 		return "", 0, err

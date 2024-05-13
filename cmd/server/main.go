@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/wawan93/faraway-test/internal/config"
+	"github.com/wawan93/faraway-test/internal/config/server"
 	"github.com/wawan93/faraway-test/internal/service/pow"
 	"github.com/wawan93/faraway-test/internal/service/wow"
 	"github.com/wawan93/faraway-test/internal/tcpserver"
@@ -22,21 +22,22 @@ func main() {
 }
 
 func run() error {
-	cfg, err := config.FromEnv()
+	cfg, err := server.FromEnv()
 	if err != nil {
 		return err
 	}
 
+	// TODO: move to another package
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.Level(cfg.LogLevel),
 	})))
 
-	ps := pow.New(3)
+	ps := pow.New(cfg.Difficulty)
 	ws := wow.New()
 
 	addr := fmt.Sprintf(":%d", cfg.ListenPort)
 
-	s := tcpserver.New(addr, ps, ws)
+	s := tcpserver.New(addr, cfg.ChallengeExpiry, ps, ws)
 
 	ctx, cancel := context.WithCancel(context.Background())
 

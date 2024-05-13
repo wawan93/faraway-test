@@ -1,0 +1,30 @@
+services:
+  server:
+    build:
+      context: .
+      dockerfile: ./cmd/server/Dockerfile
+    environment:
+      - LISTEN_PORT=8080
+      - LOG_LEVEL=-4
+      - DIFFICULTY=3
+      - CHALLENGE_EXPIRY=1s
+    ports:
+      - "8080:8080"
+    networks:
+      - local
+
+  client:
+    build:
+      context: .
+      dockerfile: ./cmd/client/Dockerfile
+    environment:
+      - SERVER_ADDR=server:8080
+      - LOG_LEVEL=-4
+    networks:
+      - local
+    depends_on:
+      - server
+
+networks:
+  local:
+    driver: bridge

@@ -1,9 +1,9 @@
 package tcpserver
 
 import (
+	"bufio"
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net"
 	"strconv"
@@ -13,7 +13,6 @@ import (
 )
 
 const (
-	timeout      = time.Second
 	maxBodyBytes = int64(1 << 16) // 65536 bytes
 )
 
@@ -39,15 +38,17 @@ type WoWService interface {
 type Server struct {
 	addr       string
 	challenges sync.Map
+	expires    time.Duration
 	pow        PowService
 	wow        WoWService
 }
 
 // New creates a new Server
-func New(addr string, pow PowService, wow WoWService) *Server {
+func New(addr string, expires time.Duration, pow PowService, wow WoWService) *Server {
 	return &Server{
 		addr:       addr,
 		challenges: sync.Map{},
+		expires:    expires,
 		pow:        pow,
 		wow:        wow,
 	}
@@ -99,26 +100,24 @@ func (s *Server) handleClient(conn net.Conn) {
 		}
 	}()
 
-	err := conn.SetReadDeadline(time.Now().Add(timeout))
+	err := conn.SetReadDeadline(time.Now().Add(s.expires))
 	if err != nil {
 		slog.Error("cannot set read deadline", err)
 		return
 	}
 
-	r := io.LimitReader(conn, maxBodyBytes)
+	r := bufio.NewReader(conn)
 
-	payload := make([]byte, maxBodyBytes)
-
-	n, err := r.Read(payload)
+	payload, err := r.ReadString('\n')
 	if err != nil {
 		slog.Error("cannot read request body", err)
 		return
 	}
 
-	payload = payload[:n]
+	payload = strings.TrimSpace(payload)
 
 	// if GET, then it's a challenge request
-	if string(payload) == "GET" {
+	if payload == "GET" {
 		err = s.generateAndWriteChallenge(conn)
 		if err != nil {
 			slog.Error("cannot generate and write challenge", err)
@@ -127,7 +126,7 @@ func (s *Server) handleClient(conn net.Conn) {
 	}
 
 	// if not GET, then it's a challenge response
-	parts := strings.Split(string(payload), " ")
+	parts := strings.Split(payload, " ")
 	if len(parts) != 2 {
 		slog.Error("invalid payload")
 		return

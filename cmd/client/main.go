@@ -6,23 +6,33 @@ import (
 	"os"
 	"strconv"
 
+	clientConfig "github.com/wawan93/faraway-test/internal/config/client"
 	"github.com/wawan93/faraway-test/internal/service/pow"
 	"github.com/wawan93/faraway-test/internal/tcpclient"
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("Error:", slog.Any("error", err))
+		os.Exit(1)
+	}
+}
+
+func run() error {
+	cfg, err := clientConfig.FromEnv()
+	if err != nil {
+		return fmt.Errorf("cannot load config: %w", err)
+	}
+
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
+		Level: slog.Level(cfg.LogLevel),
 	})))
 
-	addr := "localhost:8080" // TODO: move to config
-
-	client := tcpclient.New(addr)
+	client := tcpclient.New(cfg.ServerAddr)
 
 	challenge, difficulty, err := client.GetChallenge()
 	if err != nil {
-		slog.Error("Error:", err)
-		return
+		return fmt.Errorf("cannot get challenge: %w", err)
 	}
 
 	slog.Debug("Challenge:", slog.Any("challenge", challenge), slog.Any("difficulty", difficulty))
@@ -41,9 +51,10 @@ func main() {
 
 	quote, err := client.GetQuote(challenge, nonce)
 	if err != nil {
-		slog.Error("Error:", err)
-		return
+		return fmt.Errorf("cannot get quote: %w", err)
 	}
 
 	fmt.Println(quote)
+
+	return nil
 }
